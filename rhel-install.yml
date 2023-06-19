@@ -1,0 +1,16 @@
+---
+- name: 'RHEL INSTALL'
+  hosts: all
+  gather_facts: no
+
+  tasks:
+
+  - name: 'rhel-install | update de todos os pacotes do sistema'
+    yum:
+      name: '*'
+      state: 'latest'
+
+  - name: 'rhel-install | instalação de pacotes adcionais para o sistema'
+    yum:
+      name: '{{ rhel_packages }}'
+      state: 'latest' 

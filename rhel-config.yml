@@ -1,0 +1,112 @@
+---
+- name: 'RHEL CONFIG'
+  hosts: all
+  gather_facts: no
+  vars:
+
+  tasks:
+
+  - name: 'rhel-config | copiando arquivo com tuning de kernel'
+    copy:
+      src: ../files/rhel/sysctl.d/90-rhel-tuning.conf
+      dest: /etc/sysctl.d/90-rhel-tuning.conf
+      owner: root
+      group: root
+      mode: 0644
+      backup: yes
+
+  - name: 'rhel-config | aplicando configuração do tuning de kernel'
+    command: sysctl -p /etc/sysctl.d/90-rhel-tuning.conf
+
+  - name: 'rhel-config | copiando arquivo com limits customizado'
+    copy:
+      src: ../files/rhel/limits.d/90-rhel-limits.conf
+      dest: /etc/security/limits.d/90-rhel-limits.conf
+      owner: root
+      group: root
+      mode: 0600
+      backup: yes
+
+  - name: "rhel-config | verificando interfaces"
+    shell: "nmcli -f NAME connection show | grep -v NAME | sed 's/[[:blank:]]*$//'"
+    register: ethconf_output
+
+  - name: "rhel-config | aplicando configurações de ring buffer RX para interfaces"
+    shell: "nmcli con mod \"{{ item }}\" ethtool.ring-rx {{ rhel_ringbuf_rx }} "
+    with_items:
+      - "{{ ethconf_output.stdout_lines }}"
+
+  - name: "rhel-config | aplicando configurações de ring buffer TX para interfaces"
+    shell: "nmcli con mod \"{{ item }}\" ethtool.ring-tx {{ rhel_ringbuf_tx }} "
+    with_items:
+      - "{{ ethconf_output.stdout_lines }}"
+
+  - name: "rhel-config | efetivando configuracoes de ring buffer"
+    shell: "nmcli con up \"{{ item }}\" "
+    with_items:
+      - "{{ ethconf_output.stdout_lines }}"
+
+  - name: "rhel-config | Configurando Timezone"
+    shell: "timedatectl set-timezone '{{ server_timezone }}'"
+                                            
+  - name: "config | removendo entrada IPV6 do /etc/hosts"
+    lineinfile:
+      path: /etc/hosts
+      regexp: "::1" 
+      state: absent
+      backup: yes
+
+  - name: 'rhel-config | Transferindo pacote do JDK'
+    copy:
+      src: ../files/jdk/{{ jdk_package }}
+      dest: /tmp/{{ jdk_package }}
+      owner: root
+      group: root
+      mode: 0600
+
+  - name: "rhel-config | Instalando JDK"
+    shell: "yum install /tmp/{{ jdk_package }} -y"
+
+  - name:  "rhel-config | Criando estrutura de VG e LVOL"
+    block:
+      - name: Check for vg_sso VG
+        fail:
+          msg: VG vg_sso does not exist
+        when:
+          - ansible_lvm['vgs']['vg_sso'] is not defined
+    rescue:
+      - name:  "rhel-config | Criando diretório para logs do SSO"
+        file:
+          path: /opt/rhsso/logs
+          state: directory
+          mode: '0755'
+        when: is_create_lvol|bool
+
+      - name: "rhel-config | Criando VG para logs do SSO" 
+        lvg:
+          vg: vg_sso
+          pvs: /dev/nvme1n1
+          pesize: 4
+        when: is_create_lvol|bool
+
+      - name: "rhel-config | Criando LVOL para logs do SSO" 
+        lvol:
+          vg: vg_sso
+          lv:  lv_rhsso_logs
+          size: 100%FREE
+          force: yes
+        when: is_create_lvol|bool
+
+      - name: "rhel-config | Criando filesystem para logs do SSO"
+        filesystem:
+          fstype: xfs
+          dev: /dev/vg_sso/lv_rhsso_logs
+        when: is_create_lvol|bool
+
+      - name: "rhel-config | Montando filesystem para logs do SSO"
+        mount:
+          path: /opt/rhsso/logs
+          src: /dev/vg_sso/lv_rhsso_logs
+          fstype: xfs
+          state: mounted
+        when: is_create_lvol|bool

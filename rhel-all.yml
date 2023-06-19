@@ -1,0 +1,4 @@
+---
+- import_playbook: rhel-install.yml
+- import_playbook: rhel-config.yml
+- import_playbook: reboot-vms.yml

@@ -1,0 +1,66 @@
+---
+- name: "rhel-perf | Coleta de arquivos de sar dos servidores RH-SSO"
+  hosts: rhsso
+  gather_facts: yes
+  vars:
+    is_to_use_x11: True
+
+  tasks:
+
+  - name: "rhel-perf | Extract the archive file with exluding text document"
+    unarchive:
+      src: ../files/ksar.tar
+      dest: /home/ec2-user/
+      mode: 0755
+    delegate_to: localhost
+    run_once: yes
+
+  - name: "rhel-perf | Remove diretorio temporarioio"
+    file:
+      path: /tmp/rhsso_sar
+      state: absent
+    delegate_to: localhost
+    run_once: yes
+
+  - name: "rhel-perf |Create sar file from current day"
+    shell: "LC_ALL=C sar -A > /tmp/{{ inventory_hostname }}_{{ansible_date_time.date}}_sar.txt"
+
+  - name:  "rhel-perf | Fetch sar file"
+    fetch:
+      src: "/tmp/{{ inventory_hostname }}_{{ansible_date_time.date}}_sar.txt"
+      dest: /tmp/rhsso_sar
+
+  - name:  "fetch | Create PDF file"
+    shell: "java -jar /home/ec2-user/ksar/ksar-5.0.6.jar -input /tmp/rhsso_sar/{{ inventory_hostname }}/tmp/{{ inventory_hostname }}_{{ansible_date_time.date}}_sar.txt -outputPDF /tmp/rhsso_sar/{{ inventory_hostname }}_{{ansible_date_time.date}}_sar.pdf"
+    delegate_to: localhost
+
+  - name: "rhel-perf | Lista PDF files"
+    shell: 'ls -l /tmp/rhsso_sar/*.pdf'
+    delegate_to: localhost
+    run_once: yes
+    register: command_output
+
+  - debug:
+      var: command_output.stdout_lines 
+    delegate_to: localhost
+    run_once: yes
+
+  - name: "rhel-config | Installing x11 packages"
+    yum:
+      name: 
+        - xorg-x11-xauth
+        - xterm
+      state: 'latest'
+    when: is_to_use_x11|bool
+    delegate_to: localhost
+    run_once: yes
+
+  - name:  "rhel-config | Instruction to open files on latest ksar version"
+    shell: "echo 'To open ksar graphical tool run: java -jar /home/ec2-user/ksar/ksar-5.2.4.jar -input /tmp/rhsso_sar/{{ inventory_hostname }}/tmp/{{ inventory_hostname }}_{{ansible_date_time.date}}_sar.txt' "
+    when: is_to_use_x11|bool
+    delegate_to: localhost
+    register: command_output
+
+  - debug:
+      var: command_output.stdout_lines
+    delegate_to: localhost

@@ -1,0 +1,44 @@
+---
+- name: "playbook | Coleta de logs do SAR"
+  hosts: rhsso
+  gather_facts: yes
+  vars:
+
+  tasks:
+  - name: "archive | Compress SAR logs on remote SSO server"
+    archive:
+      path: "/var/log/sa/"
+      dest: "/tmp/{{ inventory_hostname }}_{{ansible_date_time.date}}_sar_logs.tar.gz"
+      format: gz
+
+  - name:  "fetch | Fetch SAR logs"
+    fetch:
+      src: "/tmp/{{ inventory_hostname }}_{{ansible_date_time.date}}_sar_logs.tar.gz"
+      dest: /tmp/sar_logs
+
+  - name: "archive | Compress SAR logs"
+    archive:
+      path: /tmp/sar_logs
+      dest: /tmp/sar_logs_{{ansible_date_time.date}}.tar.gz
+      mode: 0755
+      format: gz
+    delegate_to: localhost
+    run_once: yes
+
+  - name: "clear | Remove diretório temporário"
+    file:
+      path: /tmp/sar_logs
+      state: absent
+    delegate_to: localhost
+    run_once: yes
+
+  - name: "output | Lista arquivo compactado"
+    shell: 'ls -l /tmp/sar_logs_{{ansible_date_time.date}}.tar.gz'
+    delegate_to: localhost
+    run_once: yes
+    register: command_output
+
+  - debug:
+      var: "{{ command_output.stdout_lines }}"
+    delegate_to: localhost
+    run_once: yes

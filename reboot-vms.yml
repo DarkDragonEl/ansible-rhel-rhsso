@@ -1,0 +1,10 @@
+---
+- name: 'REINICIALIZAÇÃO DAS VMS'
+  hosts: all
+  gather_facts: no
+
+  tasks:
+
+  - name: 'reboot | reiniciando as vms apos configuração'
+    reboot:
+      reboot_timeout: 3000

@@ -1,0 +1,49 @@
+---
+- name: 'RHEL TROUBLESHOOTING'
+  hosts: localhost
+  gather_facts: no
+  vars:
+
+  tasks:
+
+  - name: "rhel-config |Coleta sosreport de todos servidores RH-SSO"
+    command: "sos collect --batch --ssh-key /home/ec2-user/.ssh/redhat-01.pem --ssh-user ec2-user --nopasswd-sudo --nodes={{ hostvars | dict2items | selectattr('key', 'in', groups.rhsso) | map(attribute='value.ansible_host') | join(',') }} --cluster-type=none"
+    register: sos_output
+    delegate_to: localhost
+    run_once: yes
+
+  - name: "rhel-config | Mostra Arquivo compactado"
+    debug: 
+      var: sos_output
+
+  - name: "rhel-troubleshooting | Lista arquivo sos-collect"
+    shell: "ls -lat /var/tmp/sos-collector-* | head -1 | awk '{print $9}'"
+    delegate_to: localhost
+    run_once: yes
+    register: sos_file
+
+  - debug:
+      var: "{{ sos_file.stdout_lines }}"
+    delegate_to: localhost
+    run_once: yes
+
+  - name: 'rhel-troubleshooting | instalação do redhat-support-tool'
+    yum:
+      name: redhat-support-tool
+      state: 'latest'
+
+  - name: "rhel-troubleshooting | Confirma upload para o chamado"
+    pause:
+      prompt: "Deseja fazer upload para o case? (s/n)"
+    register: confirm_upload
+
+  - name: "rhel-troubleshooting | Informar número do chamado"
+    pause:
+      prompt: "Informe o número do chamado"
+    register: case_number
+
+  - name: "rhel-troubleshooting | Fazendo upload do sosreport para o chamado..."
+    command: "/usr/bin/redhat-support-tool addattachment -c {{ case_number.user_input }} -f {{ sos_file.stdout_lines }}"
+    delegate_to: localhost
+    run_once: yes
+    when: confirm_upload.user_input|lower == "s"
